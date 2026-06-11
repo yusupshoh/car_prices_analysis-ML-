@@ -28,18 +28,14 @@ def load_data(path: str) -> pd.DataFrame:
         numeric_cols = ["year", "condition", "odometer", "mmr", "sellingprice"]
         for col in numeric_cols:
             if col in df.columns:df[col] = pd.to_numeric(df[col], errors='coerce')
-
         df = df.dropna(subset=numeric_cols)
         text_cols = ["make", "model", "trim", "body", "transmission", "color", "state"]
         for col in text_cols:
             if col in df.columns:df[col] = df[col].astype(str).str.strip().str.title()
-
         df = df[(df["sellingprice"] > 100) & (df["odometer"] > 0) & (df["year"] >= 1990)]
         df = df.reset_index(drop=True)
         return df
-    except Exception as exc:
-        st.error(f"Faylni o'qishda xatolik: {exc}")
-        return pd.DataFrame()
+    except Exception as exc:st.error(f"Faylni o'qishda xatolik: {exc}");return pd.DataFrame()
 
 
 def page_overview(df: pd.DataFrame) -> None:
@@ -52,7 +48,6 @@ def page_overview(df: pd.DataFrame) -> None:
         col3.metric("O'rtacha sotilish narxi", f"${df['sellingprice'].mean():,.0f}")
         col4.metric("O'rtacha MMR (Bozor bahosi)", f"${df['mmr'].mean():,.0f}")
         st.divider()
-
         st.subheader("Top-10 eng ko'p sotilgan brendlar statistikasi")
         st.markdown("Bozorda eng ko'p aylanayotgan brendlarning o'rtacha ko'rsatkichlari:")
         top_10_makes_list = df["make"].value_counts().head(10).index
@@ -138,46 +133,165 @@ def page_overview(df: pd.DataFrame) -> None:
             plt.close(fig3)
         else:st.warning("Belgilangan kombinatsiya bo'yicha ma'lumot topilmadi. Filtr parametrlarini o'zgartirib ko'ring.")
 
-    except Exception as exc:
-        st.error(f"Statistikani shakllantirishda xatolik: {exc}")
-
+    except Exception as exc:st.error(f"Statistikani shakllantirishda xatolik: {exc}")
 
 
 def page_ml_prediction(df: pd.DataFrame) -> None:
-    st.header("Narx Bashorati")
-    st.markdown("Avtomobil texnik xususiyatlariga qarab uning narxini bashorat qiling.")
-    try:
-        model_df = df[["year", "condition", "odometer", "mmr", "sellingprice"]].dropna()
-        X = model_df[["year", "condition", "odometer", "mmr"]]
-        y = model_df["sellingprice"]
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-        model = LinearRegression()
-        model.fit(X_train, y_train)
-        y_pred = model.predict(X_test)
-        r2 = r2_score(y_test, y_pred)
-        st.success(f"Model muvaffaqiyatli o'qitildi! Model aniqligi (R2 Score): {r2:.2%}")
-        st.subheader("Yangi avtomobil qiymatlarini kiriting:")
-        c1, c2, c3, c4 = st.columns(4)
+    st.header("Narx Bashorati va Aqlli Maslahatchi")
 
-        with c1:input_year = st.number_input("Ishlab chiqarilgan yili:", min_value=1990, max_value=2026, value=2015)
-        with c2:input_cond = st.slider("Texnik holati (1-50):", min_value=1.0, max_value=50.0, value=35.0, step=1.0)
-        with c3:input_odometer = st.number_input("Probegi (Mil):", min_value=0, value=50000, step=1000)
-        with c4:input_mmr = st.number_input("Bozor bahosi (MMR $):", min_value=100, value=15000, step=500)
 
-        if st.button("Narxni Bashorat Qilish"):
-            input_data = pd.DataFrame([[input_year, input_cond, input_odometer, input_mmr]], columns=["year", "condition", "odometer", "mmr"])
-            predicted_price = model.predict(input_data)[0]
-            if predicted_price < 0:predicted_price = 100
-            st.metric("Tavsiya etilgan sotuv narxi:", f"${predicted_price:,.2f}")
+    tab1, tab2, tab3 = st.tabs([
+        "ML Narx Bashorati",
+        "Mening Budjetimga Nimalar Keladi?",
+        "Shtatlararo Geografik Arbitraj"
+    ])
 
-    except Exception as exc:
-        st.error(f"Modelni yuklash yoki ishlatishda xatolik: {exc}")
+
+    with tab1:
+        st.markdown("Scikit-learn yordamida avtomobil texnik xususiyatlariga qarab uning narxini bashorat qiling.")
+        try:
+            model_df = df[["year", "condition", "odometer", "mmr", "sellingprice"]].dropna()
+
+            X = model_df[["year", "condition", "odometer", "mmr"]]
+            y = model_df["sellingprice"]
+
+            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+            model = LinearRegression()
+            model.fit(X_train, y_train)
+
+            y_pred = model.predict(X_test)
+            r2 = r2_score(y_test, y_pred)
+
+            st.success(f"Model muvaffaqiyatli o'qitildi! Model aniqligi (R2 Score): {r2:.2%}")
+
+            st.subheader("Yangi avtomobil qiymatlarini kiriting:")
+            c1, c2, c3, c4 = st.columns(4)
+
+            with c1:
+                input_year = st.number_input("Ishlab chiqarilgan yili:", min_value=1990, max_value=2026, value=2015)
+            with c2:
+                input_cond = st.slider("Texnik holati (1-50):", min_value=1.0, max_value=50.0, value=35.0, step=1.0)
+            with c3:
+                input_odometer = st.number_input("Probegi (Mil):", min_value=0, value=50000, step=1000)
+            with c4:
+                input_mmr = st.number_input("Bozor bahosi (MMR $):", min_value=100, value=15000, step=500)
+
+            if st.button("Narxni Bashorat Qilish"):
+                input_data = pd.DataFrame([[input_year, input_cond, input_odometer, input_mmr]],
+                                          columns=["year", "condition", "odometer", "mmr"])
+                predicted_price = model.predict(input_data)[0]
+
+                if predicted_price < 0:
+                    predicted_price = 100
+
+                st.metric("Tavsiya etilgan sotuv narxi:", f"${predicted_price:,.2f}")
+
+        except Exception as exc:
+            st.error(f"Modelni yuklash yoki ishlatishda xatolik: {exc}")
+
+    with tab2:
+        st.markdown(
+            "Hamyoningizdagi pul miqdorini kiriting va unga mos keladigan eng ommabop avtomobillar tahlilini ko'ring.")
+
+        budget = st.number_input("Sizning budjetingiz ($):", min_value=500, max_value=200000, value=15000, step=500)
+
+        min_budget = budget * 0.9
+        max_budget = budget * 1.1
+
+        budget_df = df[(df["sellingprice"] >= min_budget) & (df["sellingprice"] <= max_budget)]
+
+        if not budget_df.empty:
+            st.info(
+                f"Sizning budjetingiz atrofida (${min_budget:,.0f} - ${max_budget:,.0f}) jami {budget_df.shape[0]:,} ta savdo topildi.")
+
+            top_budget_makes = budget_df["make"].value_counts().head(5).index
+            filtered_budget_df = budget_df[budget_df["make"].isin(top_budget_makes)]
+
+            analysis_table = (
+                filtered_budget_df.groupby("make")
+                .agg(
+                    Ortacha_Narx=("sellingprice", "mean"),
+                    Ortacha_Probeg=("odometer", "mean"),
+                    Ortacha_Holat=("condition", "mean"),
+                    Sotuvlar_Soni=("sellingprice", "count")
+                )
+                .reset_index()
+            )
+
+            b_col1, b_col2 = st.columns(2)
+
+            with b_col1:
+                st.subheader("Budjetingizga mos top-5 brend ko'rsatkichlari")
+                display_table = analysis_table.copy()
+                display_table["Ortacha_Narx"] = display_table["Ortacha_Narx"].map("${:,.0f}".format)
+                display_table["Ortacha_Probeg"] = display_table["Ortacha_Probeg"].map("{:,.0f} mil".format)
+                display_table["Ortacha_Holat"] = display_table["Ortacha_Holat"].map("{:.1f}".format)
+                display_table.columns = ["Brend", "O'rtacha Narxi", "O'rtacha Probegi", "O'rtacha Holati",
+                                         "Savdolar Soni"]
+                st.dataframe(display_table, use_container_width=True, hide_index=True)
+
+            with b_col2:
+                st.subheader("O'rtacha narxlar taqsimoti (Brendlar bo'yicha)")
+                fig, ax = plt.subplots(figsize=(10, 6))
+                sns.barplot(
+                    data=analysis_table,
+                    y="make",
+                    x="Ortacha_Narx",
+                    hue="make",
+                    palette="viridis",
+                    legend=False,
+                    ax=ax
+                )
+                ax.set_xlabel("O'rtacha sotilish narxi ($)")
+                ax.set_ylabel("Brend")
+                st.pyplot(fig)
+                plt.close(fig)
+        else:
+            st.warning("Bu budjet atrofida ma'lumot topilmadi. Pul miqdorini o'zgartirib ko'ring.")
+
+    with tab3:
+        st.markdown("Avtomobil rusumlarining AQSh shtatlari bo'yicha narx farqlari va eng arzon hududlar tahlili.")
+        try:
+            geo_df = df[["state", "make", "sellingprice"]].dropna().copy()
+            geo_df["state"] = geo_df["state"].astype(str).str.upper()
+            popular_makes = geo_df["make"].value_counts().head(10).index.tolist()
+            selected_make = st.selectbox("Taqqoslash uchun avtomobil brendini tanlang:", popular_makes)
+            make_df = geo_df[geo_df["make"] == selected_make]
+            make_state_prices = make_df.groupby("state")["sellingprice"].agg(["mean", "count"]).reset_index()
+            make_state_prices = make_state_prices[make_state_prices["count"] >= 30].sort_values(by="mean")
+            if len(make_state_prices) >= 2:
+                cheapest_state = make_state_prices.iloc[0]
+                expensive_state = make_state_prices.iloc[-1]
+                price_diff = expensive_state["mean"] - cheapest_state["mean"]
+                st.warning(f"**Biznes Tahlil:** **{selected_make}** rusumli avtomobillar hozirda eng arzon **{cheapest_state['state']}** shtatida sotilmoqda ")
+                st.subheader(f"{selected_make} brendining shtatlar bo'yicha narx ko'rinishi")
+                fig_geo, ax_geo = plt.subplots(figsize=(15, 6))
+                sns.barplot(
+                    data=make_state_prices,
+                    x="state",
+                    y="mean",
+                    hue="state",
+                    palette="coolwarm",
+                    legend=False,
+                    ax=ax_geo
+                )
+                ax_geo.set_xlabel("Shtat (State)")
+                ax_geo.set_ylabel("O'rtacha Sotilish Narxi ($)")
+                plt.xticks(rotation=45)
+                st.pyplot(fig_geo)
+                plt.close(fig_geo)
+            else:
+                st.info(
+                    "Ushbu brend bo'yicha hududiy taqqoslash o'tkazish uchun yetarli geografik ma'lumot mavjud emas.")
+
+        except Exception as exc:
+            st.error(f"Geografik tahlil qismida xatolik: {exc}")
 
 
 def page_condition_analysis(df: pd.DataFrame) -> None:
     st.header("Texnik Holat va Narx Tahlili")
     st.markdown("Avtomobilning texnik holati, bosib o'tgan masofasi va ishlab chiqarilgan yilining yakuniy narxga ta'siri.")
-
     try:
         col1, col2 = st.columns(2)
         with col1:
@@ -198,49 +312,34 @@ def page_condition_analysis(df: pd.DataFrame) -> None:
             ax2.set_ylabel("Sotilish narxi ($)")
             st.pyplot(fig2)
             plt.close(fig2)
-
         st.divider()
-
         st.subheader("Yillar davomida o'rtacha narx va probeg tendensiyasi")
         trend_df = df.groupby("year").agg({"sellingprice": "mean", "odometer": "mean"}).reset_index()
         fig3, ax3_1 = plt.subplots(figsize=(15, 6))
         ax3_2 = ax3_1.twinx()
-
         sns.lineplot(data=trend_df, x="year", y="sellingprice", color="#1f77b4", linewidth=2.5, label="O'rtacha narx", ax=ax3_1)
         sns.lineplot(data=trend_df, x="year", y="odometer", color="#2ca02c", linewidth=2.5, label="O'rtacha probeg", ax=ax3_2)
-
         ax3_1.set_xlabel("Ishlab chiqarilgan yili")
         ax3_1.set_ylabel("O'rtacha sotilish narxi ($)", color="#1f77b4")
         ax3_2.set_ylabel("O'rtacha bosib o'tilgan masofa (Mil)", color="#2ca02c")
-
         ax3_1.tick_params(axis='y', labelcolor="#1f77b4")
         ax3_2.tick_params(axis='y', labelcolor="#2ca02c")
-
         ax3_1.get_legend().remove()
         ax3_2.get_legend().remove()
-
-        lines1, labels1 = ax3_1.get_images_and_labels() if hasattr(ax3_1,
-                                                                   'get_images_and_labels') else ax3_1.get_legend_handles_labels()
+        lines1, labels1 = ax3_1.get_images_and_labels() if hasattr(ax3_1,'get_images_and_labels') else ax3_1.get_legend_handles_labels()
         lines2, labels2 = ax3_2.get_legend_handles_labels()
         ax3_1.legend(lines1 + lines2, labels1 + labels2, loc="upper left")
-
         st.pyplot(fig3)
         plt.close(fig3)
-
-    except Exception as exc:
-        st.error(f"Texnik holatni tahlil qilishda xatolik: {exc}")
+    except Exception as exc:st.error(f"Texnik holatni tahlil qilishda xatolik: {exc}")
 
 
 def main() -> None:
     st.title("Avtomobil Auksion Narxlari Tahlili")
-
     df = load_data(DATA_PATH)
-    if df.empty:
-        st.stop()
-
+    if df.empty:st.stop()
     st.sidebar.title("Navigatsiya")
     st.sidebar.markdown("Kerakli bo'limni tanlang:")
-
     page = st.sidebar.radio(
         "Bo'limlar:",
         [
@@ -249,16 +348,11 @@ def main() -> None:
             "Narx Bashorati (ML)"
         ]
     )
-
     st.sidebar.divider()
     st.sidebar.info(f"Datasetda jami: {df.shape[0]:,} ta faol qator mavjud.")
-
-    if page == "Umumiy Statistika":
-        page_overview(df)
-    elif page == "Narx Bashorati (ML)":
-        page_ml_prediction(df)
-    elif page == "Texnik Holat va Narx":
-        page_condition_analysis(df)
+    if page == "Umumiy Statistika":page_overview(df)
+    elif page == "Narx Bashorati (ML)":page_ml_prediction(df)
+    elif page == "Texnik Holat va Narx":page_condition_analysis(df)
 
 
 if __name__ == "__main__":
