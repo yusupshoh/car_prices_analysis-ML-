@@ -185,7 +185,7 @@ def page_ml_prediction(df: pd.DataFrame) -> None:
             with b_col2:
                 st.subheader("O'rtacha narxlar taqsimoti (Brendlar bo'yicha)")
                 fig, ax = plt.subplots(figsize=(10, 6))
-                sns.barplot(data=analysis_table, y="make", x="Ortacha_Narx", hue="make", palette="viridis", egend=False, ax=ax)
+                sns.barplot(data=analysis_table, y="make", x="Ortacha_Narx", hue="make", palette="viridis", legend=False, ax=ax)
                 ax.set_xlabel("O'rtacha sotilish narxi ($)")
                 ax.set_ylabel("Brend")
                 st.pyplot(fig)
