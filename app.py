@@ -52,15 +52,13 @@ def page_overview(df: pd.DataFrame) -> None:
         st.markdown("Bozorda eng ko'p aylanayotgan brendlarning o'rtacha ko'rsatkichlari:")
         top_10_makes_list = df["make"].value_counts().head(10).index
         top_10_df = df[df["make"].isin(top_10_makes_list)]
-        brand_table = (
-            top_10_df.groupby("make")
+        brand_table = (top_10_df.groupby("make")
             .agg(
                 Sotuvlar_Soni=("sellingprice", "count"),
                 Ortacha_Narx=("sellingprice", "mean"),
                 Ortacha_Probeg=("odometer", "mean"),
                 Ortacha_Holat=("condition", "mean")
             ).sort_values(by="Sotuvlar_Soni", ascending=False))
-
         brand_table["Sotuvlar_Soni"] = brand_table["Sotuvlar_Soni"].map("{:,} ta".format)
         brand_table["Ortacha_Narx"] = brand_table["Ortacha_Narx"].map("${:,.0f}".format)
         brand_table["Ortacha_Probeg"] = brand_table["Ortacha_Probeg"].map("{:,.0f} mil".format)
@@ -68,10 +66,8 @@ def page_overview(df: pd.DataFrame) -> None:
         brand_table.columns = ["Sotuvlar soni", "O'rtacha narxi", "O'rtacha probegi", "O'rtacha holati (Condition)"]
         st.dataframe(brand_table, use_container_width=True)
         st.divider()
-
         st.subheader("Vizual tahlil va grafiklar")
         graph_col1, graph_col2 = st.columns(2)
-
         with graph_col1:
             st.markdown("#### Top-10 brendlar (Grafik ko'rinishida)")
             top_makes = df["make"].value_counts().head(10)
@@ -96,14 +92,9 @@ def page_overview(df: pd.DataFrame) -> None:
         st.subheader("Yillar kesimida dinamik sotuv hajmi")
         st.markdown("Quyidagi ko'p tarmoqli filtrlar yordamida ma'lumotlarni o'zingizga moslab boshqaring:")
         f_col1, f_col2, f_col3 = st.columns(3)
-
         with f_col1:
             min_year, max_year = int(df["year"].min()), int(df["year"].max())
-            selected_years = st.slider(
-                "Yillar oralig'i:",
-                min_value=min_year, max_value=max_year,
-                value=(int(df["year"].quantile(0.15)), max_year), step=1
-            )
+            selected_years = st.slider("Yillar oralig'i:", min_value=min_year, max_value=max_year, value=(int(df["year"].quantile(0.15)), max_year), step=1)
         with f_col2:
             all_makes = sorted(df["make"].dropna().unique())
             default_makes = [m for m in top_10_makes_list[:3] if m in all_makes]
@@ -112,13 +103,10 @@ def page_overview(df: pd.DataFrame) -> None:
             all_bodies = sorted(df["body"].dropna().unique())
             common_bodies = [b for b in ["Sedan", "Suv", "Coupe", "Convertible"] if b in all_bodies]
             selected_bodies = st.multiselect("Kuzov turini tanlang:", options=all_bodies, default=common_bodies)
-
         filtered_df = df[
             (df["year"] >= selected_years[0]) & (df["year"] <= selected_years[1]) &
             (df["make"].isin(selected_makes)) &
-            (df["body"].isin(selected_bodies))
-            ]
-
+            (df["body"].isin(selected_bodies))]
         if not filtered_df.empty:
             plot_data = pd.crosstab(filtered_df["year"], filtered_df["make"]).sort_index()
             fig3, ax3 = plt.subplots(figsize=(15, 6))
@@ -132,82 +120,51 @@ def page_overview(df: pd.DataFrame) -> None:
             st.pyplot(fig3)
             plt.close(fig3)
         else:st.warning("Belgilangan kombinatsiya bo'yicha ma'lumot topilmadi. Filtr parametrlarini o'zgartirib ko'ring.")
-
     except Exception as exc:st.error(f"Statistikani shakllantirishda xatolik: {exc}")
 
 
 def page_ml_prediction(df: pd.DataFrame) -> None:
     st.header("Narx Bashorati va Aqlli Maslahatchi")
-
-
     tab1, tab2, tab3 = st.tabs([
         "ML Narx Bashorati",
         "Mening Budjetimga Nimalar Keladi?",
         "Shtatlar aro"
     ])
-
-
     with tab1:
         st.markdown("Scikit-learn yordamida avtomobil texnik xususiyatlariga qarab uning narxini bashorat qiling.")
         try:
             model_df = df[["year", "condition", "odometer", "mmr", "sellingprice"]].dropna()
-
             X = model_df[["year", "condition", "odometer", "mmr"]]
             y = model_df["sellingprice"]
-
             X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-
             model = LinearRegression()
             model.fit(X_train, y_train)
-
             y_pred = model.predict(X_test)
             r2 = r2_score(y_test, y_pred)
-
             st.success(f"Model muvaffaqiyatli o'qitildi! Model aniqligi (R2 Score): {r2:.2%}")
-
             st.subheader("Yangi avtomobil qiymatlarini kiriting:")
             c1, c2, c3, c4 = st.columns(4)
-
-            with c1:
-                input_year = st.number_input("Ishlab chiqarilgan yili:", min_value=1990, max_value=2026, value=2015)
-            with c2:
-                input_cond = st.slider("Texnik holati (1-50):", min_value=1.0, max_value=50.0, value=35.0, step=1.0)
-            with c3:
-                input_odometer = st.number_input("Probegi (Mil):", min_value=0, value=50000, step=1000)
-            with c4:
-                input_mmr = st.number_input("Bozor bahosi (MMR $):", min_value=100, value=15000, step=500)
-
+            with c1:input_year = st.number_input("Ishlab chiqarilgan yili:", min_value=1990, max_value=2026, value=2015)
+            with c2:input_cond = st.slider("Texnik holati (1-50):", min_value=1.0, max_value=50.0, value=35.0, step=1.0)
+            with c3:input_odometer = st.number_input("Probegi (Mil):", min_value=0, value=50000, step=1000)
+            with c4:input_mmr = st.number_input("Bozor bahosi (MMR $):", min_value=100, value=15000, step=500)
             if st.button("Narxni Bashorat Qilish"):
                 input_data = pd.DataFrame([[input_year, input_cond, input_odometer, input_mmr]],
                                           columns=["year", "condition", "odometer", "mmr"])
                 predicted_price = model.predict(input_data)[0]
-
-                if predicted_price < 0:
-                    predicted_price = 100
-
+                if predicted_price < 0: predicted_price = 100
                 st.metric("Tavsiya etilgan sotuv narxi:", f"${predicted_price:,.2f}")
-
-        except Exception as exc:
-            st.error(f"Modelni yuklash yoki ishlatishda xatolik: {exc}")
-
+        except Exception as exc:st.error(f"Modelni yuklash yoki ishlatishda xatolik: {exc}")
     with tab2:
-        st.markdown(
-            "Hamyoningizdagi pul miqdorini kiriting va unga mos keladigan eng ommabop avtomobillar tahlilini ko'ring.")
-
+        st.markdown("Hamyoningizdagi pul miqdorini kiriting va unga mos keladigan eng ommabop avtomobillar tahlilini ko'ring.")
         budget = st.number_input("Sizning budjetingiz ($):", min_value=500, max_value=200000, value=15000, step=500)
-
         min_budget = budget * 0.9
         max_budget = budget * 1.1
-
         budget_df = df[(df["sellingprice"] >= min_budget) & (df["sellingprice"] <= max_budget)]
-
         if not budget_df.empty:
-            st.info(
-                f"Sizning budjetingiz atrofida (${min_budget:,.0f} - ${max_budget:,.0f}) jami {budget_df.shape[0]:,} ta savdo topildi.")
-
+            st.info( f"Sizning budjetingiz atrofida (${min_budget:,.0f} - ${max_budget:,.0f}) jami {budget_df.shape[0]:,} ta savdo topildi.")
             top_budget_makes = budget_df["make"].value_counts().head(5).index
             filtered_budget_df = budget_df[budget_df["make"].isin(top_budget_makes)]
-
             analysis_table = (
                 filtered_budget_df.groupby("make")
                 .agg(
@@ -215,41 +172,25 @@ def page_ml_prediction(df: pd.DataFrame) -> None:
                     Ortacha_Probeg=("odometer", "mean"),
                     Ortacha_Holat=("condition", "mean"),
                     Sotuvlar_Soni=("sellingprice", "count")
-                )
-                .reset_index()
-            )
-
+                ).reset_index())
             b_col1, b_col2 = st.columns(2)
-
             with b_col1:
                 st.subheader("Budjetingizga mos top-5 brend ko'rsatkichlari")
                 display_table = analysis_table.copy()
                 display_table["Ortacha_Narx"] = display_table["Ortacha_Narx"].map("${:,.0f}".format)
                 display_table["Ortacha_Probeg"] = display_table["Ortacha_Probeg"].map("{:,.0f} mil".format)
                 display_table["Ortacha_Holat"] = display_table["Ortacha_Holat"].map("{:.1f}".format)
-                display_table.columns = ["Brend", "O'rtacha Narxi", "O'rtacha Probegi", "O'rtacha Holati",
-                                         "Savdolar Soni"]
+                display_table.columns = ["Brend", "O'rtacha Narxi", "O'rtacha Probegi", "O'rtacha Holati", "Savdolar Soni"]
                 st.dataframe(display_table, use_container_width=True, hide_index=True)
-
             with b_col2:
                 st.subheader("O'rtacha narxlar taqsimoti (Brendlar bo'yicha)")
                 fig, ax = plt.subplots(figsize=(10, 6))
-                sns.barplot(
-                    data=analysis_table,
-                    y="make",
-                    x="Ortacha_Narx",
-                    hue="make",
-                    palette="viridis",
-                    legend=False,
-                    ax=ax
-                )
+                sns.barplot(data=analysis_table, y="make", x="Ortacha_Narx", hue="make", palette="viridis", egend=False, ax=ax)
                 ax.set_xlabel("O'rtacha sotilish narxi ($)")
                 ax.set_ylabel("Brend")
                 st.pyplot(fig)
                 plt.close(fig)
-        else:
-            st.warning("Bu budjet atrofida ma'lumot topilmadi. Pul miqdorini o'zgartirib ko'ring.")
-
+        else:st.warning("Bu budjet atrofida ma'lumot topilmadi. Pul miqdorini o'zgartirib ko'ring.")
     with tab3:
         st.markdown("Avtomobil rusumlarining AQSh shtatlari bo'yicha narx farqlari va eng arzon hududlar tahlili.")
         try:
@@ -267,24 +208,13 @@ def page_ml_prediction(df: pd.DataFrame) -> None:
                 st.warning(f"**Biznes Tahlil:** **{selected_make}** rusumli avtomobillar hozirda eng arzon **{cheapest_state['state']}** shtatida sotilmoqda ")
                 st.subheader(f"{selected_make} brendining shtatlar bo'yicha narx ko'rinishi")
                 fig_geo, ax_geo = plt.subplots(figsize=(15, 6))
-                sns.barplot(
-                    data=make_state_prices,
-                    x="state",
-                    y="mean",
-                    hue="state",
-                    palette="coolwarm",
-                    legend=False,
-                    ax=ax_geo
-                )
+                sns.barplot(data=make_state_prices,x="state",y="mean",hue="state",palette="coolwarm",legend=False,ax=ax_geo)
                 ax_geo.set_xlabel("Shtat (State)")
                 ax_geo.set_ylabel("O'rtacha Sotilish Narxi ($)")
                 plt.xticks(rotation=45)
                 st.pyplot(fig_geo)
                 plt.close(fig_geo)
-            else:
-                st.info(
-                    "Ushbu brend bo'yicha hududiy taqqoslash o'tkazish uchun yetarli geografik ma'lumot mavjud emas.")
-
+            else:st.info("Ushbu brend bo'yicha hududiy taqqoslash o'tkazish uchun yetarli geografik ma'lumot mavjud emas.")
         except Exception as exc:
             st.error(f"Geografik tahlil qismida xatolik: {exc}")
 
@@ -303,7 +233,6 @@ def page_condition_analysis(df: pd.DataFrame) -> None:
             ax1.set_ylabel("Sotilish narxi")
             st.pyplot(fig1)
             plt.close(fig1)
-
         with col2:
             st.subheader("Probeg va Narx o'rtasidagi bog'liqlik")
             fig2, ax2 = plt.subplots(figsize=(10, 6))
@@ -342,12 +271,7 @@ def main() -> None:
     st.sidebar.markdown("Kerakli bo'limni tanlang:")
     page = st.sidebar.radio(
         "Bo'limlar:",
-        [
-            "Umumiy Statistika",
-            "Texnik Holat va Narx",
-            "Narx Bashorati (ML)"
-        ]
-    )
+        ["Umumiy Statistika", "Texnik Holat va Narx", "Narx Bashorati (ML)"])
     st.sidebar.divider()
     st.sidebar.info(f"Datasetda jami: {df.shape[0]:,} ta faol qator mavjud.")
     if page == "Umumiy Statistika":page_overview(df)
