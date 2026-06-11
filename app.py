@@ -208,7 +208,7 @@ def page_condition_analysis(df: pd.DataFrame) -> None:
 
         sns.lineplot(data=trend_df, x="year", y="sellingprice", color="#1f77b4", linewidth=2.5, label="O'rtacha narx", ax=ax3_1)
         sns.lineplot(data=trend_df, x="year", y="odometer", color="#2ca02c", linewidth=2.5, label="O'rtacha probeg", ax=ax3_2)
-        
+
         ax3_1.set_xlabel("Ishlab chiqarilgan yili")
         ax3_1.set_ylabel("O'rtacha sotilish narxi ($)", color="#1f77b4")
         ax3_2.set_ylabel("O'rtacha bosib o'tilgan masofa (Mil)", color="#2ca02c")
