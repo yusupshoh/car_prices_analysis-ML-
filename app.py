@@ -143,7 +143,7 @@ def page_ml_prediction(df: pd.DataFrame) -> None:
     tab1, tab2, tab3 = st.tabs([
         "ML Narx Bashorati",
         "Mening Budjetimga Nimalar Keladi?",
-        "Shtatlararo Geografik Arbitraj"
+        "Shtatlar aro"
     ])
 
 
