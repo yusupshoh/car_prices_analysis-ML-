@@ -205,7 +205,7 @@ def page_ml_prediction(df: pd.DataFrame) -> None:
                 cheapest_state = make_state_prices.iloc[0]
                 expensive_state = make_state_prices.iloc[-1]
                 price_diff = expensive_state["mean"] - cheapest_state["mean"]
-                st.warning(f"**Biznes Tahlil:** **{selected_make}** rusumli avtomobillar hozirda eng arzon **{cheapest_state['state']}** shtatida sotilmoqda ")
+                st.warning(f"**Biznes Tahlil:** **{selected_make}** rusumli avtomobillarni eng arzonlari **{cheapest_state['state']}** shtatida sotilmoqda ")
                 st.subheader(f"{selected_make} brendining shtatlar bo'yicha narx ko'rinishi")
                 fig_geo, ax_geo = plt.subplots(figsize=(15, 6))
                 sns.barplot(data=make_state_prices,x="state",y="mean",hue="state",palette="coolwarm",legend=False,ax=ax_geo)
