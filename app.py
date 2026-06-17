@@ -27,15 +27,42 @@ def load_data(path: str) -> pd.DataFrame:
         df.columns = df.columns.str.lower()
         numeric_cols = ["year", "condition", "odometer", "mmr", "sellingprice"]
         for col in numeric_cols:
-            if col in df.columns:df[col] = pd.to_numeric(df[col], errors='coerce')
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce')
         df = df.dropna(subset=numeric_cols)
         text_cols = ["make", "model", "trim", "body", "transmission", "color", "state"]
         for col in text_cols:
-            if col in df.columns:df[col] = df[col].astype(str).str.strip().str.title()
+            if col in df.columns:
+                df[col] = df[col].astype(str).str.strip().str.title()
         df = df[(df["sellingprice"] > 100) & (df["odometer"] > 0) & (df["year"] >= 1990)]
         df = df.reset_index(drop=True)
         return df
-    except Exception as exc:st.error(f"Faylni o'qishda xatolik: {exc}");return pd.DataFrame()
+    except Exception as exc:
+        st.error(f"Faylni o'qishda xatolik: {exc}")
+        return pd.DataFrame()
+
+
+@st.cache_data(show_spinner="Flip ma'lumotlari tayyorlanmoqda...")
+def compute_flips(path: str) -> pd.DataFrame:
+    try:
+        df = pd.read_csv(path, on_bad_lines='skip')
+        df.columns = df.columns.str.lower()
+        df['saledate'] = pd.to_datetime(df['saledate'], errors='coerce', utc=True)
+        df['sellingprice'] = pd.to_numeric(df['sellingprice'], errors='coerce')
+        df['odometer'] = pd.to_numeric(df['odometer'], errors='coerce')
+        df['make'] = df['make'].astype(str).str.strip().str.title()
+
+        resold = df[df.duplicated(subset='vin', keep=False)].copy()
+        resold = resold.sort_values(['vin', 'saledate'])
+        resold['price_change'] = resold.groupby('vin')['sellingprice'].diff()
+        resold['days_held'] = resold.groupby('vin')['saledate'].diff().dt.days
+        resold['odo_change'] = resold.groupby('vin')['odometer'].diff()
+
+        flips = resold.dropna(subset=['price_change']).copy()
+        return flips
+    except Exception as exc:
+        st.error(f"Flip ma'lumotlarini hisoblashda xatolik: {exc}")
+        return pd.DataFrame()
 
 
 def page_overview(df: pd.DataFrame) -> None:
@@ -52,13 +79,16 @@ def page_overview(df: pd.DataFrame) -> None:
         st.markdown("Bozorda eng ko'p aylanayotgan brendlarning o'rtacha ko'rsatkichlari:")
         top_10_makes_list = df["make"].value_counts().head(10).index
         top_10_df = df[df["make"].isin(top_10_makes_list)]
-        brand_table = (top_10_df.groupby("make")
+        brand_table = (
+            top_10_df.groupby("make")
             .agg(
                 Sotuvlar_Soni=("sellingprice", "count"),
                 Ortacha_Narx=("sellingprice", "mean"),
                 Ortacha_Probeg=("odometer", "mean"),
-                Ortacha_Holat=("condition", "mean")
-            ).sort_values(by="Sotuvlar_Soni", ascending=False))
+                Ortacha_Holat=("condition", "mean"),
+            )
+            .sort_values(by="Sotuvlar_Soni", ascending=False)
+        )
         brand_table["Sotuvlar_Soni"] = brand_table["Sotuvlar_Soni"].map("{:,} ta".format)
         brand_table["Ortacha_Narx"] = brand_table["Ortacha_Narx"].map("${:,.0f}".format)
         brand_table["Ortacha_Probeg"] = brand_table["Ortacha_Probeg"].map("{:,.0f} mil".format)
@@ -75,7 +105,8 @@ def page_overview(df: pd.DataFrame) -> None:
             sns.barplot(x=top_makes.values, y=top_makes.index, hue=top_makes.index, palette="viridis", legend=False, ax=ax1)
             ax1.set_xlabel("Sotuvlar soni")
             ax1.set_ylabel("Brend")
-            for i, v in enumerate(top_makes.values): ax1.text(v, i, f" {v:,}", va="center", fontsize=10, weight='bold')
+            for i, v in enumerate(top_makes.values):
+                ax1.text(v, i, f" {v:,}", va="center", fontsize=10, weight='bold')
             st.pyplot(fig1)
             plt.close(fig1)
         with graph_col2:
@@ -94,7 +125,10 @@ def page_overview(df: pd.DataFrame) -> None:
         f_col1, f_col2, f_col3 = st.columns(3)
         with f_col1:
             min_year, max_year = int(df["year"].min()), int(df["year"].max())
-            selected_years = st.slider("Yillar oralig'i:", min_value=min_year, max_value=max_year, value=(int(df["year"].quantile(0.15)), max_year), step=1)
+            selected_years = st.slider(
+                "Yillar oralig'i:", min_value=min_year, max_value=max_year,
+                value=(int(df["year"].quantile(0.15)), max_year), step=1,
+            )
         with f_col2:
             all_makes = sorted(df["make"].dropna().unique())
             default_makes = [m for m in top_10_makes_list[:3] if m in all_makes]
@@ -106,12 +140,16 @@ def page_overview(df: pd.DataFrame) -> None:
         filtered_df = df[
             (df["year"] >= selected_years[0]) & (df["year"] <= selected_years[1]) &
             (df["make"].isin(selected_makes)) &
-            (df["body"].isin(selected_bodies))]
+            (df["body"].isin(selected_bodies))
+        ]
         if not filtered_df.empty:
             plot_data = pd.crosstab(filtered_df["year"], filtered_df["make"]).sort_index()
             fig3, ax3 = plt.subplots(figsize=(15, 6))
             plot_data.plot(kind="bar", stacked=False, ax=ax3, width=0.8)
-            ax3.set_title(f"Filtrlangan avtomobillarning yillik sotuv ko'rsatkichlari ({selected_years[0]} - {selected_years[1]})",fontsize=13, pad=12)
+            ax3.set_title(
+                f"Filtrlangan avtomobillarning yillik sotuv ko'rsatkichlari ({selected_years[0]} - {selected_years[1]})",
+                fontsize=13, pad=12,
+            )
             ax3.set_xlabel("Ishlab chiqarilgan yili (Year)", fontsize=11)
             ax3.set_ylabel("Sotilgan avtomobillar soni (Ta)", fontsize=11)
             ax3.set_xticklabels(ax3.get_xticklabels(), rotation=0)
@@ -119,8 +157,10 @@ def page_overview(df: pd.DataFrame) -> None:
             plt.tight_layout()
             st.pyplot(fig3)
             plt.close(fig3)
-        else:st.warning("Belgilangan kombinatsiya bo'yicha ma'lumot topilmadi. Filtr parametrlarini o'zgartirib ko'ring.")
-    except Exception as exc:st.error(f"Statistikani shakllantirishda xatolik: {exc}")
+        else:
+            st.warning("Belgilangan kombinatsiya bo'yicha ma'lumot topilmadi. Filtr parametrlarini o'zgartirib ko'ring.")
+    except Exception as exc:
+        st.error(f"Statistikani shakllantirishda xatolik: {exc}")
 
 
 def page_ml_prediction(df: pd.DataFrame) -> None:
@@ -128,7 +168,7 @@ def page_ml_prediction(df: pd.DataFrame) -> None:
     tab1, tab2, tab3 = st.tabs([
         "ML Narx Bashorati",
         "Mening Budjetimga Nimalar Keladi?",
-        "Shtatlar aro"
+        "Shtatlar aro",
     ])
     with tab1:
         st.markdown("Scikit-learn yordamida avtomobil texnik xususiyatlariga qarab uning narxini bashorat qiling.")
@@ -144,17 +184,25 @@ def page_ml_prediction(df: pd.DataFrame) -> None:
             st.success(f"Model muvaffaqiyatli o'qitildi! Model aniqligi (R2 Score): {r2:.2%}")
             st.subheader("Yangi avtomobil qiymatlarini kiriting:")
             c1, c2, c3, c4 = st.columns(4)
-            with c1:input_year = st.number_input("Ishlab chiqarilgan yili:", min_value=1990, max_value=2026, value=2015)
-            with c2:input_cond = st.slider("Texnik holati (1-50):", min_value=1.0, max_value=50.0, value=35.0, step=1.0)
-            with c3:input_odometer = st.number_input("Probegi (Mil):", min_value=0, value=50000, step=1000)
-            with c4:input_mmr = st.number_input("Bozor bahosi (MMR $):", min_value=100, value=15000, step=500)
+            with c1:
+                input_year = st.number_input("Ishlab chiqarilgan yili:", min_value=1990, max_value=2026, value=2015)
+            with c2:
+                input_cond = st.slider("Texnik holati (1-50):", min_value=1.0, max_value=50.0, value=35.0, step=1.0)
+            with c3:
+                input_odometer = st.number_input("Probegi (Mil):", min_value=0, value=50000, step=1000)
+            with c4:
+                input_mmr = st.number_input("Bozor bahosi (MMR $):", min_value=100, value=15000, step=500)
             if st.button("Narxni Bashorat Qilish"):
-                input_data = pd.DataFrame([[input_year, input_cond, input_odometer, input_mmr]],
-                                          columns=["year", "condition", "odometer", "mmr"])
+                input_data = pd.DataFrame(
+                    [[input_year, input_cond, input_odometer, input_mmr]],
+                    columns=["year", "condition", "odometer", "mmr"],
+                )
                 predicted_price = model.predict(input_data)[0]
-                if predicted_price < 0: predicted_price = 100
+                if predicted_price < 0:
+                    predicted_price = 100
                 st.metric("Tavsiya etilgan sotuv narxi:", f"${predicted_price:,.2f}")
-        except Exception as exc:st.error(f"Modelni yuklash yoki ishlatishda xatolik: {exc}")
+        except Exception as exc:
+            st.error(f"Modelni yuklash yoki ishlatishda xatolik: {exc}")
     with tab2:
         st.markdown("Hamyoningizdagi pul miqdorini kiriting va unga mos keladigan eng ommabop avtomobillar tahlilini ko'ring.")
         budget = st.number_input("Sizning budjetingiz ($):", min_value=500, max_value=200000, value=15000, step=500)
@@ -162,7 +210,7 @@ def page_ml_prediction(df: pd.DataFrame) -> None:
         max_budget = budget * 1.1
         budget_df = df[(df["sellingprice"] >= min_budget) & (df["sellingprice"] <= max_budget)]
         if not budget_df.empty:
-            st.info( f"Sizning budjetingiz atrofida (${min_budget:,.0f} - ${max_budget:,.0f}) jami {budget_df.shape[0]:,} ta savdo topildi.")
+            st.info(f"Sizning budjetingiz atrofida (${min_budget:,.0f} - ${max_budget:,.0f}) jami {budget_df.shape[0]:,} ta savdo topildi.")
             top_budget_makes = budget_df["make"].value_counts().head(5).index
             filtered_budget_df = budget_df[budget_df["make"].isin(top_budget_makes)]
             analysis_table = (
@@ -171,8 +219,10 @@ def page_ml_prediction(df: pd.DataFrame) -> None:
                     Ortacha_Narx=("sellingprice", "mean"),
                     Ortacha_Probeg=("odometer", "mean"),
                     Ortacha_Holat=("condition", "mean"),
-                    Sotuvlar_Soni=("sellingprice", "count")
-                ).reset_index())
+                    Sotuvlar_Soni=("sellingprice", "count"),
+                )
+                .reset_index()
+            )
             b_col1, b_col2 = st.columns(2)
             with b_col1:
                 st.subheader("Budjetingizga mos top-5 brend ko'rsatkichlari")
@@ -190,7 +240,8 @@ def page_ml_prediction(df: pd.DataFrame) -> None:
                 ax.set_ylabel("Brend")
                 st.pyplot(fig)
                 plt.close(fig)
-        else:st.warning("Bu budjet atrofida ma'lumot topilmadi. Pul miqdorini o'zgartirib ko'ring.")
+        else:
+            st.warning("Bu budjet atrofida ma'lumot topilmadi. Pul miqdorini o'zgartirib ko'ring.")
     with tab3:
         st.markdown("Avtomobil rusumlarining AQSh shtatlari bo'yicha narx farqlari va eng arzon hududlar tahlili.")
         try:
@@ -203,18 +254,20 @@ def page_ml_prediction(df: pd.DataFrame) -> None:
             make_state_prices = make_state_prices[make_state_prices["count"] >= 30].sort_values(by="mean")
             if len(make_state_prices) >= 2:
                 cheapest_state = make_state_prices.iloc[0]
-                expensive_state = make_state_prices.iloc[-1]
-                price_diff = expensive_state["mean"] - cheapest_state["mean"]
-                st.warning(f"**Biznes Tahlil:** **{selected_make}** rusumli avtomobillarni eng arzonlari **{cheapest_state['state']}** shtatida sotilmoqda ")
+                st.warning(
+                    f"**Biznes Tahlil:** **{selected_make}** rusumli avtomobillarni eng arzonlari "
+                    f"**{cheapest_state['state']}** shtatida sotilmoqda"
+                )
                 st.subheader(f"{selected_make} brendining shtatlar bo'yicha narx ko'rinishi")
                 fig_geo, ax_geo = plt.subplots(figsize=(15, 6))
-                sns.barplot(data=make_state_prices,x="state",y="mean",hue="state",palette="coolwarm",legend=False,ax=ax_geo)
+                sns.barplot(data=make_state_prices, x="state", y="mean", hue="state", palette="coolwarm", legend=False, ax=ax_geo)
                 ax_geo.set_xlabel("Shtat (State)")
                 ax_geo.set_ylabel("O'rtacha Sotilish Narxi ($)")
                 plt.xticks(rotation=45)
                 st.pyplot(fig_geo)
                 plt.close(fig_geo)
-            else:st.info("Ushbu brend bo'yicha hududiy taqqoslash o'tkazish uchun yetarli geografik ma'lumot mavjud emas.")
+            else:
+                st.info("Ushbu brend bo'yicha hududiy taqqoslash o'tkazish uchun yetarli geografik ma'lumot mavjud emas.")
         except Exception as exc:
             st.error(f"Geografik tahlil qismida xatolik: {exc}")
 
@@ -253,30 +306,240 @@ def page_condition_analysis(df: pd.DataFrame) -> None:
         ax3_2.set_ylabel("O'rtacha bosib o'tilgan masofa (Mil)", color="#2ca02c")
         ax3_1.tick_params(axis='y', labelcolor="#1f77b4")
         ax3_2.tick_params(axis='y', labelcolor="#2ca02c")
-        ax3_1.get_legend().remove()
-        ax3_2.get_legend().remove()
-        lines1, labels1 = ax3_1.get_images_and_labels() if hasattr(ax3_1,'get_images_and_labels') else ax3_1.get_legend_handles_labels()
+        lines1, labels1 = ax3_1.get_legend_handles_labels()
         lines2, labels2 = ax3_2.get_legend_handles_labels()
+        ax3_1.get_legend().remove()
         ax3_1.legend(lines1 + lines2, labels1 + labels2, loc="upper left")
         st.pyplot(fig3)
         plt.close(fig3)
-    except Exception as exc:st.error(f"Texnik holatni tahlil qilishda xatolik: {exc}")
+    except Exception as exc:
+        st.error(f"Texnik holatni tahlil qilishda xatolik: {exc}")
+
+
+def page_flip_analysis(flips: pd.DataFrame) -> None:
+    st.header("Flip Tahlili — Qayta Sotilgan Mashinalar")
+    st.markdown(
+        "Bir xil VIN raqamiga ega bo'lib, ikki marta auksiondan o'tgan avtomobillar tahlili. "
+        "Har bir 'flip' — bu bir odam sotib olib, keyinchalik qayta sotgan mashina."
+    )
+
+    if flips.empty:
+        st.error("Flip ma'lumotlari yuklanmadi.")
+        return
+
+    try:
+        total_flips = len(flips)
+        avg_profit = flips["price_change"].mean()
+        median_profit = flips["price_change"].median()
+        profitable_pct = (flips["price_change"] > 0).mean() * 100
+        loss_pct = (flips["price_change"] < 0).mean() * 100
+        avg_days = flips["days_held"].dropna().mean()
+
+        m1, m2, m3, m4, m5 = st.columns(5)
+        m1.metric("Jami flip soni", f"{total_flips:,} ta")
+        m2.metric("O'rtacha foyda", f"${avg_profit:,.0f}")
+        m3.metric("Mediana foyda", f"${median_profit:,.0f}")
+        m4.metric("Foydali fliplar", f"{profitable_pct:.1f}%")
+        m5.metric("O'rtacha kutish", f"{avg_days:.0f} kun")
+
+        st.divider()
+
+        # --- Tab tuzilmasi ---
+        tab1, tab2, tab3 = st.tabs([
+            "Foyda Taqsimoti",
+            "Brend bo'yicha Tahlil",
+            "Eng Foydali Fliplar",
+        ])
+
+        # ---------- TAB 1: Foyda taqsimoti ----------
+        with tab1:
+            st.subheader("Foyda/Zarar taqsimoti")
+            col1, col2 = st.columns(2)
+
+            with col1:
+                st.markdown("#### Foyda guruhlari bo'yicha")
+                bins = [-999999, -3000, -1000, 0, 1000, 3000, 5000, 999999]
+                labels_b = ["< -$3k", "-$3k — -$1k", "-$1k — $0", "$0 — $1k", "$1k — $3k", "$3k — $5k", "> $5k"]
+                flips["profit_bucket"] = pd.cut(flips["price_change"], bins=bins, labels=labels_b)
+                bucket_counts = flips["profit_bucket"].value_counts().reindex(labels_b)
+
+                colors_bar = ["#A32D2D", "#D85A30", "#E2906A", "#888780", "#1D9E75", "#0F6E56", "#085041"]
+                fig1, ax1 = plt.subplots(figsize=(9, 5))
+                bars = ax1.bar(labels_b, bucket_counts.values, color=colors_bar, edgecolor="white", linewidth=0.5)
+                for bar, val in zip(bars, bucket_counts.values):
+                    ax1.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 20,
+                             f"{int(val):,}", ha="center", va="bottom", fontsize=9, fontweight="bold")
+                ax1.set_xlabel("Foyda/Zarar oralig'i")
+                ax1.set_ylabel("Flip soni")
+                ax1.set_xticklabels(labels_b, rotation=25, ha="right")
+                plt.tight_layout()
+                st.pyplot(fig1)
+                plt.close(fig1)
+
+            with col2:
+                st.markdown("#### Umumiy natija")
+                profitable = (flips["price_change"] > 50).sum()
+                loss = (flips["price_change"] < -50).sum()
+                breakeven = total_flips - profitable - loss
+                pie_labels = [f"Foydali ({profitable:,})", f"Zararli ({loss:,})", f"Neytral ({breakeven:,})"]
+                pie_sizes = [profitable, loss, breakeven]
+                pie_colors = ["#1D9E75", "#D85A30", "#888780"]
+                fig2, ax2 = plt.subplots(figsize=(7, 5))
+                wedges, texts, autotexts = ax2.pie(
+                    pie_sizes, labels=pie_labels, colors=pie_colors,
+                    autopct="%1.1f%%", startangle=140,
+                    wedgeprops={"edgecolor": "white", "linewidth": 1.5},
+                )
+                for at in autotexts:
+                    at.set_fontsize(10)
+                    at.set_fontweight("bold")
+                plt.tight_layout()
+                st.pyplot(fig2)
+                plt.close(fig2)
+
+            st.divider()
+            st.subheader("Kutish vaqti va foyda o'rtasidagi bog'liqlik")
+            sample = flips[flips["days_held"].between(1, 365)].sample(n=min(2000, len(flips)), random_state=42)
+            sample["profit_color"] = sample["price_change"].apply(lambda x: "#1D9E75" if x > 0 else "#D85A30")
+            fig3, ax3 = plt.subplots(figsize=(14, 5))
+            ax3.scatter(sample["days_held"], sample["price_change"], c=sample["profit_color"], alpha=0.4, s=15)
+            ax3.axhline(0, color="black", linewidth=0.8, linestyle="--")
+            ax3.set_xlabel("Ushlab turilgan kunlar soni")
+            ax3.set_ylabel("Narx o'zgarishi ($)")
+            ax3.set_xlim(0, 365)
+            plt.tight_layout()
+            st.pyplot(fig3)
+            plt.close(fig3)
+
+        # ---------- TAB 2: Brend bo'yicha ----------
+        with tab2:
+            st.subheader("Brendlar bo'yicha flip statistikasi")
+            min_flips = st.slider("Minimal flip soni (filtr):", min_value=10, max_value=200, value=50, step=10)
+
+            brand_stats = (
+                flips.groupby("make")
+                .agg(
+                    Flip_Soni=("price_change", "count"),
+                    Ortacha_Foyda=("price_change", "mean"),
+                    Mediana_Foyda=("price_change", "median"),
+                    Foydali_Pct=("price_change", lambda x: (x > 0).mean() * 100),
+                    Ortacha_Kun=("days_held", "mean"),
+                )
+                .reset_index()
+                .query(f"Flip_Soni >= {min_flips}")
+                .sort_values("Flip_Soni", ascending=False)
+            )
+
+            col1, col2 = st.columns(2)
+            with col1:
+                st.markdown("#### Flip soni bo'yicha top brendlar")
+                fig4, ax4 = plt.subplots(figsize=(9, max(5, len(brand_stats) * 0.45)))
+                colors_make = ["#1D9E75" if p > 0 else "#D85A30" for p in brand_stats["Ortacha_Foyda"]]
+                bars4 = ax4.barh(brand_stats["make"], brand_stats["Flip_Soni"], color=colors_make)
+                for bar, val in zip(bars4, brand_stats["Flip_Soni"]):
+                    ax4.text(val + 5, bar.get_y() + bar.get_height() / 2,
+                             f"{int(val):,}", va="center", fontsize=9)
+                ax4.set_xlabel("Flip soni")
+                ax4.invert_yaxis()
+                plt.tight_layout()
+                st.pyplot(fig4)
+                plt.close(fig4)
+
+            with col2:
+                st.markdown("#### O'rtacha foyda bo'yicha brendlar")
+                brand_profit = brand_stats.sort_values("Ortacha_Foyda", ascending=True)
+                colors_profit = ["#1D9E75" if p > 0 else "#D85A30" for p in brand_profit["Ortacha_Foyda"]]
+                fig5, ax5 = plt.subplots(figsize=(9, max(5, len(brand_profit) * 0.45)))
+                ax5.barh(brand_profit["make"], brand_profit["Ortacha_Foyda"], color=colors_profit)
+                ax5.axvline(0, color="black", linewidth=0.8, linestyle="--")
+                ax5.set_xlabel("O'rtacha foyda ($)")
+                plt.tight_layout()
+                st.pyplot(fig5)
+                plt.close(fig5)
+
+            st.divider()
+            st.subheader("Jadval ko'rinishida")
+            display_stats = brand_stats.copy()
+            display_stats["Ortacha_Foyda"] = display_stats["Ortacha_Foyda"].map("${:,.0f}".format)
+            display_stats["Mediana_Foyda"] = display_stats["Mediana_Foyda"].map("${:,.0f}".format)
+            display_stats["Foydali_Pct"] = display_stats["Foydali_Pct"].map("{:.1f}%".format)
+            display_stats["Ortacha_Kun"] = display_stats["Ortacha_Kun"].map("{:.0f} kun".format)
+            display_stats["Flip_Soni"] = display_stats["Flip_Soni"].map("{:,} ta".format)
+            display_stats.columns = [
+                "Brend", "Flip soni", "O'rtacha foyda", "Mediana foyda",
+                "Foydali fliplar %", "O'rtacha kutish",
+            ]
+            st.dataframe(display_stats, use_container_width=True, hide_index=True)
+
+        # ---------- TAB 3: Eng foydali fliplar ----------
+        with tab3:
+            st.subheader("Eng yuqori foydali individual fliplar")
+            st.markdown("Bitta sotuv davomida eng ko'p foyda qilingan mashinalar:")
+            top_n = st.slider("Nechta ko'rsatilsin:", min_value=5, max_value=50, value=20)
+            top_flips = (
+                flips[["vin", "make", "model", "year", "sellingprice", "price_change", "days_held", "odometer"]]
+                .dropna()
+                .sort_values("price_change", ascending=False)
+                .head(top_n)
+                .copy()
+            )
+            top_flips["price_change"] = top_flips["price_change"].map("${:,.0f}".format)
+            top_flips["sellingprice"] = top_flips["sellingprice"].map("${:,.0f}".format)
+            top_flips["odometer"] = top_flips["odometer"].map("{:,.0f} mil".format)
+            top_flips["days_held"] = top_flips["days_held"].map("{:.0f} kun".format)
+            top_flips["year"] = top_flips["year"].astype(int)
+            top_flips.columns = ["VIN", "Brend", "Model", "Yil", "Sotilish narxi", "Foyda", "Kutilgan vaqt", "Probeg"]
+            st.dataframe(top_flips, use_container_width=True, hide_index=True)
+
+            st.divider()
+            st.subheader("Eng katta zararli fliplar")
+            worst_flips = (
+                flips[["vin", "make", "model", "year", "sellingprice", "price_change", "days_held"]]
+                .dropna()
+                .sort_values("price_change", ascending=True)
+                .head(top_n)
+                .copy()
+            )
+            worst_flips["price_change"] = worst_flips["price_change"].map("${:,.0f}".format)
+            worst_flips["sellingprice"] = worst_flips["sellingprice"].map("${:,.0f}".format)
+            worst_flips["days_held"] = worst_flips["days_held"].map("{:.0f} kun".format)
+            worst_flips["year"] = worst_flips["year"].astype(int)
+            worst_flips.columns = ["VIN", "Brend", "Model", "Yil", "Sotilish narxi", "Zarar", "Kutilgan vaqt"]
+            st.dataframe(worst_flips, use_container_width=True, hide_index=True)
+
+    except Exception as exc:
+        st.error(f"Flip tahlilida xatolik: {exc}")
 
 
 def main() -> None:
     st.title("Avtomobil Auksion Narxlari Tahlili")
     df = load_data(DATA_PATH)
-    if df.empty:st.stop()
+    if df.empty:
+        st.stop()
+
     st.sidebar.title("Navigatsiya")
     st.sidebar.markdown("Kerakli bo'limni tanlang:")
     page = st.sidebar.radio(
         "Bo'limlar:",
-        ["Umumiy Statistika", "Texnik Holat va Narx", "Narx Bashorati (ML)"])
+        [
+            "Umumiy Statistika",
+            "Texnik Holat va Narx",
+            "Narx Bashorati (ML)",
+            "Flip Tahlili (VIN)",
+        ],
+    )
     st.sidebar.divider()
     st.sidebar.info(f"Datasetda jami: {df.shape[0]:,} ta faol qator mavjud.")
-    if page == "Umumiy Statistika":page_overview(df)
-    elif page == "Narx Bashorati (ML)":page_ml_prediction(df)
-    elif page == "Texnik Holat va Narx":page_condition_analysis(df)
+
+    if page == "Umumiy Statistika":
+        page_overview(df)
+    elif page == "Narx Bashorati (ML)":
+        page_ml_prediction(df)
+    elif page == "Texnik Holat va Narx":
+        page_condition_analysis(df)
+    elif page == "Flip Tahlili (VIN)":
+        flips = compute_flips(DATA_PATH)
+        page_flip_analysis(flips)
 
 
 if __name__ == "__main__":
